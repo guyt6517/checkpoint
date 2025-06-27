@@ -16,7 +16,7 @@ if not DISCORD_WEBHOOK or not DISCORD_FAIL_WEBHOOK:
 app = Flask(__name__)
 
 # Regex: **username** (ID) joined the game.
-pattern = re.compile(r"^(\*\*)?[\w_]{3,20}(\*\*)? \(\d{1,15}\) joined the game\.$")
+pattern = re.compile(r"^\*\*[^\*]{1,30}\*\* \(ID: \d{1,15}\) joined the game\.$")
 
 # Logging file (optional)
 LOG_FILE = "fail_log.txt"

@@ -3,35 +3,67 @@ import requests
 import re
 import os
 from dotenv import load_dotenv
+from datetime import datetime
 
-# Load .env variables
+# Load environment variables
 load_dotenv()
 DISCORD_WEBHOOK = os.getenv("DISCORD_WEBHOOK")
+DISCORD_FAIL_WEBHOOK = os.getenv("DISCORD_FAIL_WEBHOOK")
 
-if not DISCORD_WEBHOOK:
-    raise RuntimeError("Missing DISCORD_WEBHOOK in .env file")
+if not DISCORD_WEBHOOK or not DISCORD_FAIL_WEBHOOK:
+    raise RuntimeError("Missing webhook(s) in .env file")
 
 app = Flask(__name__)
 
 # Regex: **username** (ID) joined the game.
 pattern = re.compile(r"^(\*\*)?[\w_]{3,20}(\*\*)? \(\d{1,15}\) joined the game\.$")
 
+# Logging file (optional)
+LOG_FILE = "fail_log.txt"
+
+def send_to_discord(webhook_url, content):
+    try:
+        resp = requests.post(webhook_url, json={"content": content})
+        resp.raise_for_status()
+        return True
+    except Exception as e:
+        print(f"❌ Discord error: {e}")
+        return False
+
+def log_failed_attempt(ip, content):
+    timestamp = datetime.utcnow().isoformat()
+    log_entry = f"[{timestamp}] IP: {ip}\nMessage: {content}\n---\n"
+
+    # Print to console
+    print("🚫 Logged failed attempt:\n" + log_entry)
+
+    # Also write to file
+    try:
+        with open(LOG_FILE, "a") as f:
+            f.write(log_entry)
+    except Exception as e:
+        print(f"❌ Failed to write to log file: {e}")
+
 @app.route("/", methods=["POST"])
 def webhook_proxy():
     data = request.get_json()
     content = data.get("content") if data else None
+    ip = request.headers.get("X-Forwarded-For", request.remote_addr)
 
     if not isinstance(content, str) or not pattern.match(content):
-        print("❌ Rejected message:", content)
+        fail_message = (
+            f"🚫 **Rejected message**\n"
+            f"**IP:** `{ip}`\n"
+            f"**Content:**\n```{content}```"
+        )
+        send_to_discord(DISCORD_FAIL_WEBHOOK, fail_message)
+        log_failed_attempt(ip, content)
         return jsonify({"error": "Invalid message format"}), 400
 
-    try:
-        response = requests.post(DISCORD_WEBHOOK, json={"content": content})
-        response.raise_for_status()
+    if send_to_discord(DISCORD_WEBHOOK, content):
         print("✅ Forwarded:", content)
         return jsonify({"success": True}), 200
-    except Exception as e:
-        print("❌ Discord error:", str(e))
+    else:
         return jsonify({"error": "Failed to send to Discord"}), 500
 
 if __name__ == "__main__":

@@ -30,19 +30,33 @@ def send_to_discord(webhook_url, content):
         print(f"❌ Discord error: {e}")
         return False
 
-def log_failed_attempt(ip, content):
+def log_failed_attempt(ip, content, headers):
     timestamp = datetime.utcnow().isoformat()
-    log_entry = f"[{timestamp}] IP: {ip}\nMessage: {content}\n---\n"
+    user_agent = headers.get("User-Agent", "Unknown")
+    forwarded_for = headers.get("X-Forwarded-For", "N/A")
+    real_ip = headers.get("X-Real-IP", "N/A")
+    referrer = headers.get("Referer", "N/A")
+    content_type = headers.get("Content-Type", "N/A")
 
-    # Print to console
+    log_entry = (
+        f"[{timestamp} UTC]\n"
+        f"IP: {ip}\n"
+        f"X-Forwarded-For: {forwarded_for}\n"
+        f"X-Real-IP: {real_ip}\n"
+        f"User-Agent: {user_agent}\n"
+        f"Referer: {referrer}\n"
+        f"Content-Type: {content_type}\n"
+        f"Raw Message:\n{content}\n---\n"
+    )
+
     print("🚫 Logged failed attempt:\n" + log_entry)
 
-    # Also write to file
     try:
         with open(LOG_FILE, "a") as f:
             f.write(log_entry)
     except Exception as e:
         print(f"❌ Failed to write to log file: {e}")
+
 
 @app.route("/", methods=["POST"])
 def webhook_proxy():
